@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .github/hooks/scripts/prod-guard.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Boa Vista] Políticas de segurança ativas. Deleções em /prod/ bloqueadas.'"
+          }
+        ]
+      }
+    ]
+  }
+}
