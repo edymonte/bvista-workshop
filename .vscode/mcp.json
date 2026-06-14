@@ -1,0 +1,55 @@
+{
+  // .vscode/mcp.json — Farmácia Boa Vista · Repositório: bvista-n2/incidents
+  //
+  // ISOLAMENTO POR REPOSITÓRIO
+  // Cada repositório possui seu próprio mcp.json. Isso garante que os servidores MCP
+  // disponíveis para o Copilot sejam exatamente os necessários para aquele contexto:
+  //   • bvista-n2/incidents  → GitHub MCP + SQLite de incidentes (produção, read-only)
+  //   • bvista-dev/pdv-api   → GitHub MCP apenas (sem acesso a dados de produção)
+  //   • bvista-qa/tests      → GitHub MCP apenas (time QA não acessa o SQLite de produção)
+  //
+  // O time QA NÃO deve ter o servidor SQLite configurado em seu mcp.json,
+  // pois o banco ./data/incidents.db contém dados sensíveis de incidentes de produção.
+  // Qualquer consulta analítica deve passar pelo time N2 ou por uma view de staging.
+
+  "servers": {
+    // ──────────────────────────────────────────────────────────────────────────
+    // Servidor 1: GitHub MCP — autenticação via Copilot OAuth
+    // Permite ao Copilot interagir com issues, PRs, branches e Actions deste repo.
+    // A autenticação é delegada ao token OAuth do GitHub Copilot já configurado
+    // no VS Code — nenhuma chave adicional precisa ser armazenada localmente.
+    // ──────────────────────────────────────────────────────────────────────────
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "gallery": true
+    },
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Servidor 2: SQLite local — banco de incidentes de produção
+    // Caminho: ./data/incidents.db (relativo à raiz deste repositório)
+    //
+    // SOMENTE LEITURA em produção. O flag --read-only impede qualquer escrita
+    // acidental via Copilot. Escritas devem ocorrer exclusivamente pela API
+    // de registro de incidentes (bvista-n2/incidents-api).
+    //
+    // Acesso restrito ao time N2. NÃO copie este bloco para repositórios do
+    // time QA, Dev ou qualquer outro consumidor sem aprovação do Tech Lead N2.
+    // ──────────────────────────────────────────────────────────────────────────
+    "incidents-db": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-sqlite",
+        "--db-path",
+        "${workspaceFolder}/data/incidents.db",
+        "--read-only"
+      ],
+      "env": {
+        // Garante que erros de acesso ao arquivo sejam explícitos nos logs do MCP,
+        // facilitando troubleshooting sem expor conteúdo do banco.
+        "MCP_SQLITE_LOG_LEVEL": "warn"
+      }
+    }
+  }
+}
