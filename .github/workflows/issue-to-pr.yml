@@ -1,0 +1,93 @@
+name: Issue to PR (copilot-task)
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  create-branch-and-pr:
+    if: github.event.label.name == 'copilot-task'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate branch name
+        id: branch
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          # Slugify: lowercase, replace spaces and special chars with hyphens,
+          # collapse consecutive hyphens, strip leading/trailing hyphens,
+          # truncate to 50 chars to keep branch names manageable.
+          slug="$(printf '%s' "$ISSUE_TITLE" \
+            | tr '[:upper:]' '[:lower:]' \
+            | iconv -c -t ascii//TRANSLIT \
+            | sed 's/[^a-z0-9]/-/g' \
+            | sed 's/-\+/-/g' \
+            | sed 's/^-//;s/-$//' \
+            | cut -c1-50)"
+          branch="feat/issue-${ISSUE_NUMBER}-${slug}"
+          echo "name=${branch}" >> "$GITHUB_OUTPUT"
+
+      - name: Create branch from main
+        env:
+          BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH" origin/main
+          git push origin "$BRANCH"
+
+      - name: Open Draft PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+        run: |
+          pr_url="$(gh pr create \
+            --title "feat: ${ISSUE_TITLE}" \
+            --body "## Contexto
+
+          Closes #${ISSUE_NUMBER}
+
+          > Gerado automaticamente pela label \`copilot-task\` na issue ${ISSUE_URL}
+
+          ### Descrição original da issue
+
+          ${ISSUE_BODY}" \
+            --base main \
+            --head "$BRANCH" \
+            --draft \
+            --label "copilot-task")"
+          echo "url=${pr_url}" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body \
+          "🤖 **GitHub Copilot está trabalhando nesta issue.**
+
+          Uma branch e um Draft PR foram criados automaticamente:
+
+          - **Branch:** \`${BRANCH}\`
+          - **Pull Request:** ${PR_URL}
+
+          O PR será atualizado à medida que o trabalho avançar.
+          Quando estiver pronto para revisão, remova o estado _Draft_ e solicite aprovação."
